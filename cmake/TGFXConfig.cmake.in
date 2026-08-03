@@ -39,4 +39,10 @@ if (TGFX_CONFIG_NEEDS_QT)
 endif ()
 
 include("${CMAKE_CURRENT_LIST_DIR}/TGFXTargets.cmake")
+if (TARGET TGFX::tgfx)
+    set_target_properties(TGFX::tgfx PROPERTIES
+        MAP_IMPORTED_CONFIG_NOCONFIG Release
+        MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
+        MAP_IMPORTED_CONFIG_MINSIZEREL Release)
+endif ()
 check_required_components(TGFX)

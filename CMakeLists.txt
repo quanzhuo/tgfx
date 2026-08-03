@@ -6,6 +6,15 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(./third_party/vendor_tools/vendor.cmake)
 
+if (MSVC)
+    # The vendor tool hardcodes this source-tree path, while third_party/ is not tracked.
+    # Keep TGFX's MSVC runtime policy in a tracked template and sync it before vendor builds.
+    configure_file(
+            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/MSVCDynamicRuntime.cmake
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vendor_tools/win.msvc.cmake
+            COPYONLY)
+endif ()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 cmake_policy(SET CMP0063 NEW)
@@ -561,6 +570,11 @@ target_include_directories(tgfx
         PRIVATE
             src
             ${TGFX_INCLUDES})
+if (MSVC)
+    target_compile_options(tgfx PRIVATE
+            "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:C>>:/Z7>"
+            "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:/Z7>")
+endif ()
 merge_libraries_into(tgfx ${TGFX_STATIC_LIBS})
 if (TGFX_SHARED_LIBS)
     target_link_libraries(tgfx PUBLIC ${TGFX_SHARED_LIBS})
@@ -622,11 +636,16 @@ if (TGFX_INSTALL)
             VERSION ${TGFX_VERSION}
             COMPATIBILITY SameMajorVersion)
 
+    set(TGFX_INSTALL_ARCHIVEDIR "${CMAKE_INSTALL_LIBDIR}")
+    if (MSVC)
+        set(TGFX_INSTALL_ARCHIVEDIR "${CMAKE_INSTALL_LIBDIR}/$<CONFIG>")
+    endif ()
+
     install(TARGETS tgfx
             EXPORT TGFXTargets
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${TGFX_INSTALL_ARCHIVEDIR}
             FRAMEWORK DESTINATION ${CMAKE_INSTALL_LIBDIR})
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/tgfx
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

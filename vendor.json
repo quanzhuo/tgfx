@@ -77,7 +77,6 @@
           "${BUILD_DIR}/jconfig.h"
         ],
         "platforms": [
-          "win",
           "linux",
           "mac",
           "android",
@@ -85,6 +84,27 @@
           "ohos"
         ],
         "arguments": [
+          "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+        ]
+      }
+    },
+    {
+      "name": "libjpeg-turbo",
+      "cmake": {
+        "targets": [
+          "turbojpeg-static"
+        ],
+        "includes": [
+          "${SOURCE_DIR}/jmorecfg.h",
+          "${SOURCE_DIR}/jpeglib.h",
+          "${SOURCE_DIR}/jerror.h",
+          "${BUILD_DIR}/jconfig.h"
+        ],
+        "platforms": [
+          "win"
+        ],
+        "arguments": [
+          "-DWITH_CRT_DLL=ON",
           "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
         ]
       }
@@ -126,9 +146,30 @@
         ],
         "platforms": [
           "android",
-          "win",
           "linux",
           "web"
+        ]
+      }
+    },
+    {
+      "name": "libpng",
+      "deps": {
+        "ZLIB": "zlib"
+      },
+      "cmake": {
+        "targets": [
+          "png_static"
+        ],
+        "arguments": [
+          "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW"
+        ],
+        "includes": [
+          "${SOURCE_DIR}/png.h",
+          "${SOURCE_DIR}/pngconf.h",
+          "${BUILD_DIR}/pnglibconf.h"
+        ],
+        "platforms": [
+          "win"
         ]
       }
     },
@@ -193,6 +234,7 @@
           "-DCMAKE_DISABLE_FIND_PACKAGE_HarfBuzz=TRUE",
           "-DFT_DISABLE_BROTLI=TRUE",
           "-DFT_REQUIRE_PNG=TRUE",
+          "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
           "-DCMAKE_C_FLAGS=\"-w\""
         ]
       }
