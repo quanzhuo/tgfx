@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.13)
-project(TGFX)
+project(TGFX VERSION 2.1.0 LANGUAGES C CXX)
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 include(./third_party/vendor_tools/vendor.cmake)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -9,9 +11,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 cmake_policy(SET CMP0063 NEW)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-set(TGFX_VERSION "2.1.0")
+set(TGFX_VERSION "${PROJECT_VERSION}")
+
+if (CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    set(TGFX_IS_TOP_LEVEL ON)
+else ()
+    set(TGFX_IS_TOP_LEVEL OFF)
+endif ()
 
 # Options for building tgfx
+option(TGFX_INSTALL "Generate install rules for tgfx and its CMake package" ${TGFX_IS_TOP_LEVEL})
 option(TGFX_BUILD_SVG "Enable building the SVG module" OFF)
 option(TGFX_BUILD_PDF "Enable building the PDF module" OFF)
 option(TGFX_BUILD_LAYERS "Enable building the layers module" OFF)
@@ -483,29 +492,27 @@ elseif (ANDROID)
     list(APPEND TGFX_COMPILE_OPTIONS -ffunction-sections -fdata-sections -Os -fno-exceptions -fno-rtti)
 
 elseif (WIN32)
-    find_library(Bcrypt_LIB Bcrypt)
-    list(APPEND TGFX_STATIC_LIBS ${Bcrypt_LIB})
-    find_library(ws2_32_LIB ws2_32)
-    list(APPEND TGFX_STATIC_LIBS ${ws2_32_LIB})
-    find_library(DWrite_LIB DWrite)
-    list(APPEND TGFX_STATIC_LIBS ${DWrite_LIB})
+    list(APPEND TGFX_SHARED_LIBS bcrypt ws2_32 dwrite)
 
     file(GLOB_RECURSE PLATFORM_FILES src/platform/mock/*.*)
     list(APPEND TGFX_FILES ${PLATFORM_FILES})
 
     if (TGFX_USE_NATIVE_GL)
         file(GLOB_RECURSE GPU_PLATFORM_FILES src/gpu/opengl/wgl/*.*)
-        find_library(OPENGL_LIB opengl32)
-        list(APPEND TGFX_STATIC_LIBS ${OPENGL_LIB})
+        list(APPEND TGFX_SHARED_LIBS opengl32)
         list(APPEND TGFX_FILES ${GPU_PLATFORM_FILES})
     endif ()
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
-    find_package(Threads)
-    list(APPEND TGFX_SHARED_LIBS ${CMAKE_THREAD_LIBS_INIT})
+    find_package(Threads REQUIRED)
+    list(APPEND TGFX_SHARED_LIBS Threads::Threads)
     list(APPEND TGFX_SHARED_LIBS dl)
     list(APPEND TGFX_COMPILE_OPTIONS -fPIC -pthread)
     if (TGFX_BUILD_PDF)
-        list(APPEND TGFX_COMPILE_OPTIONS -lcrypto)
+        find_library(CRYPTO_LIB crypto)
+        if (NOT CRYPTO_LIB)
+            message(FATAL_ERROR "TGFX_BUILD_PDF requires libcrypto on Linux.")
+        endif ()
+        list(APPEND TGFX_SHARED_LIBS ${CRYPTO_LIB})
     endif ()
 
     file(GLOB_RECURSE PLATFORM_FILES src/platform/mock/*.*)
@@ -543,14 +550,26 @@ if (TGFX_EXCLUDE_FILES)
 endif ()
 
 add_library(tgfx STATIC ${TGFX_FILES})
+add_library(TGFX::tgfx ALIAS tgfx)
 add_dependencies(tgfx tgfx-vendor)
-target_compile_definitions(tgfx PUBLIC ${TGFX_DEFINES})
-target_compile_options(tgfx PUBLIC ${TGFX_COMPILE_OPTIONS})
-target_include_directories(tgfx PUBLIC include PRIVATE src)
-target_include_directories(tgfx PRIVATE ${TGFX_INCLUDES})
+target_compile_definitions(tgfx PRIVATE ${TGFX_DEFINES})
+target_compile_options(tgfx PRIVATE ${TGFX_COMPILE_OPTIONS})
+target_include_directories(tgfx
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        PRIVATE
+            src
+            ${TGFX_INCLUDES})
 merge_libraries_into(tgfx ${TGFX_STATIC_LIBS})
-target_link_libraries(tgfx ${TGFX_SHARED_LIBS})
-set_target_properties(tgfx PROPERTIES PREFIX "")
+if (TGFX_SHARED_LIBS)
+    target_link_libraries(tgfx PUBLIC ${TGFX_SHARED_LIBS})
+endif ()
+set_target_properties(tgfx PROPERTIES
+        EXPORT_NAME tgfx
+        PREFIX ""
+        POSITION_INDEPENDENT_CODE ON
+        VERSION ${TGFX_VERSION})
 
 if (TGFX_BUILD_FRAMEWORK)
     set(TGFX_IDENTIFIER "org.tgfx")
@@ -571,6 +590,126 @@ if (TGFX_BUILD_FRAMEWORK)
         endif ()
         set_source_files_properties(${header} PROPERTIES MACOSX_PACKAGE_LOCATION "${location}")
     endforeach ()
+endif ()
+
+if (TGFX_INSTALL)
+    if (TGFX_USE_SWIFTSHADER)
+        message(FATAL_ERROR
+                "TGFX_INSTALL does not support packaging SwiftShader runtime libraries yet.")
+    endif ()
+
+    set(TGFX_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/TGFX" CACHE STRING
+            "Install directory for TGFX CMake package files")
+
+    set(TGFX_CONFIG_NEEDS_THREADS OFF)
+    if (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
+        set(TGFX_CONFIG_NEEDS_THREADS ON)
+    endif ()
+
+    set(TGFX_CONFIG_NEEDS_QT OFF)
+    set(TGFX_CONFIG_QT_MAJOR "")
+    if (TGFX_USE_QT)
+        set(TGFX_CONFIG_NEEDS_QT ON)
+        set(TGFX_CONFIG_QT_MAJOR "${QT_VERSION_MAJOR}")
+    endif ()
+
+    configure_package_config_file(
+            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/TGFXConfig.cmake.in
+            ${CMAKE_CURRENT_BINARY_DIR}/TGFXConfig.cmake
+            INSTALL_DESTINATION ${TGFX_INSTALL_CMAKEDIR})
+    write_basic_package_version_file(
+            ${CMAKE_CURRENT_BINARY_DIR}/TGFXConfigVersion.cmake
+            VERSION ${TGFX_VERSION}
+            COMPATIBILITY SameMajorVersion)
+
+    install(TARGETS tgfx
+            EXPORT TGFXTargets
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            FRAMEWORK DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/tgfx
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/TGFX/licenses
+            RENAME TGFX-LICENSE.txt)
+
+    set(_tgfx_third_party_license_dir ${CMAKE_INSTALL_DATADIR}/TGFX/licenses/third_party)
+    function(tgfx_install_static_vendor_license vendor license_path output_name)
+        list(FIND TGFX_STATIC_VENDORS "${vendor}" _tgfx_vendor_index)
+        if (NOT _tgfx_vendor_index EQUAL -1 AND EXISTS "${license_path}")
+            install(FILES "${license_path}"
+                    DESTINATION ${_tgfx_third_party_license_dir}
+                    RENAME "${output_name}")
+        endif ()
+    endfunction()
+
+    tgfx_install_static_vendor_license(zlib
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib/LICENSE
+            zlib-LICENSE)
+    tgfx_install_static_vendor_license(libjpeg-turbo
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libjpeg-turbo/LICENSE.md
+            libjpeg-turbo-LICENSE.md)
+    tgfx_install_static_vendor_license(libpng
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libpng/LICENSE
+            libpng-LICENSE)
+    tgfx_install_static_vendor_license(libwebp
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libwebp/COPYING
+            libwebp-COPYING)
+    tgfx_install_static_vendor_license(libwebp
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libwebp/PATENTS
+            libwebp-PATENTS)
+    tgfx_install_static_vendor_license(freetype
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/freetype/LICENSE.TXT
+            freetype-LICENSE.TXT)
+    tgfx_install_static_vendor_license(harfbuzz
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/harfbuzz/COPYING
+            harfbuzz-COPYING)
+    tgfx_install_static_vendor_license(expat
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/expat/COPYING
+            expat-COPYING)
+    tgfx_install_static_vendor_license(flatbuffers
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/flatbuffers/LICENSE
+            flatbuffers-LICENSE)
+    tgfx_install_static_vendor_license(pathkit
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pathkit/LICENSE
+            pathkit-LICENSE)
+    tgfx_install_static_vendor_license(highway
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/highway/LICENSE
+            highway-LICENSE)
+    tgfx_install_static_vendor_license(highway
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/highway/LICENSE-BSD3
+            highway-LICENSE-BSD3)
+    if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/skcms/README.md)
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/skcms/README.md
+                DESTINATION ${_tgfx_third_party_license_dir}
+                RENAME skcms-README.md)
+    endif ()
+    if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/concurrentqueue/LICENSE.md)
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/concurrentqueue/LICENSE.md
+                DESTINATION ${_tgfx_third_party_license_dir}
+                RENAME concurrentqueue-LICENSE.md)
+    endif ()
+    if (TGFX_USE_INSPECTOR AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lz4/LICENSE)
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lz4/LICENSE
+                DESTINATION ${_tgfx_third_party_license_dir}
+                RENAME lz4-LICENSE)
+    endif ()
+    if (TGFX_BUILD_PDF AND NOT (APPLE OR WIN32 OR LINUX) AND
+            EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/digestpp/LICENSE)
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/digestpp/LICENSE
+                DESTINATION ${_tgfx_third_party_license_dir}
+                RENAME digestpp-LICENSE)
+    endif ()
+
+    install(EXPORT TGFXTargets
+            FILE TGFXTargets.cmake
+            NAMESPACE TGFX::
+            DESTINATION ${TGFX_INSTALL_CMAKEDIR})
+    install(FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/TGFXConfig.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/TGFXConfigVersion.cmake
+            DESTINATION ${TGFX_INSTALL_CMAKEDIR})
 endif ()
 
 
