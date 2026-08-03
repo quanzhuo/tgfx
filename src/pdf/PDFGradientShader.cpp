@@ -59,6 +59,8 @@ uint32_t Hash(const GradientInfo& info) {
   for (const auto& radius : info.radiuses) {
     hashValue ^= floatHasher(radius) + 0x9e3779b9 + (hashValue << 6) + (hashValue >> 2);
   }
+  hashValue ^= std::hash<int>{}(static_cast<int>(info.tileMode)) + 0x9e3779b9 +
+               (hashValue << 6) + (hashValue >> 2);
 
   return hashValue;
 }
@@ -730,7 +732,7 @@ PDFIndirectReference MakeFunctionShader(PDFDocumentImpl* doc, const PDFGradientS
 
   bool doStitchFunctions =
       (state.type == GradientType::Linear || state.type == GradientType::Radial ||
-       state.type == GradientType::Conic);
+       state.type == GradientType::TwoPointConical || state.type == GradientType::Conic);
 
   enum class ShadingType : int32_t {
     Function = 1,
@@ -768,6 +770,17 @@ PDFIndirectReference MakeFunctionShader(PDFDocumentImpl* doc, const PDFGradientS
         const Point& pt1 = info.points[0];
         coords = MakePDFArray(pt1.x, pt1.y, 0, pt1.x, pt1.y, info.radiuses[0]);
       } break;
+      case GradientType::TwoPointConical: {
+        shadingType = ShadingType::Radial;
+        float r1 = info.radiuses[0];
+        float r2 = info.radiuses[1];
+        Point pt1 = info.points[0];
+        Point pt2 = info.points[1];
+        FixUpRadius(pt1, r1, pt2, r2);
+
+        coords = MakePDFArray(pt1.x, pt1.y, r1, pt2.x, pt2.y, r2);
+        break;
+      }
       case GradientType::Conic: {
         shadingType = ShadingType::Radial;
         float r1 = info.radiuses[0];
@@ -797,6 +810,8 @@ PDFIndirectReference MakeFunctionShader(PDFDocumentImpl* doc, const PDFGradientS
       case GradientType::Radial:
         transformPoints[1] = transformPoints[0];
         transformPoints[1].x += info.radiuses[0];
+        break;
+      case GradientType::TwoPointConical:
         break;
       case GradientType::Conic: {
         transformPoints[1] = transformPoints[0];
@@ -837,6 +852,20 @@ PDFIndirectReference MakeFunctionShader(PDFDocumentImpl* doc, const PDFGradientS
       case GradientType::Radial:
         RadialCode(info, perspectiveInverseOnly, functionCode);
         break;
+      case GradientType::TwoPointConical: {
+        GradientInfo infoCopy = info;
+        Matrix inverseMapperMatrix;
+        if (!mapperMatrix.invert(&inverseMapperMatrix)) {
+          return PDFIndirectReference();
+        }
+        inverseMapperMatrix.mapPoints(infoCopy.points.data(), 2);
+
+        infoCopy.radiuses[0] =
+            std::sqrt(inverseMapperMatrix.mapXY(info.radiuses[0], info.radiuses[0]).length());
+        infoCopy.radiuses[1] =
+            std::sqrt(inverseMapperMatrix.mapXY(info.radiuses[1], info.radiuses[1]).length());
+        TwoPointConicalCode(infoCopy, perspectiveInverseOnly, functionCode);
+      } break;
       case GradientType::Conic: {
         // The two point radial gradient further references state.fInfo
         // in translating from x, y coordinates to the t parameter. So, we have

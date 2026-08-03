@@ -21,6 +21,7 @@
 #include "tgfx/core/GradientType.h"
 #include "tgfx/core/Matrix.h"
 #include "tgfx/core/Shader.h"
+#include "tgfx/core/TileMode.h"
 
 namespace tgfx {
 
@@ -38,12 +39,13 @@ struct GradientInfo {
   std::vector<float> positions;  // The positions of the colors in the gradient
   std::array<Point, 2> points;
   std::array<float, 2> radiuses;
+  TileMode tileMode = TileMode::Clamp;
 };
 
 class GradientShader : public Shader {
  public:
   GradientShader(const std::vector<Color>& colors, const std::vector<float>& positions,
-                 const Matrix& pointsToUnit);
+                 const Matrix& pointsToUnit, TileMode tileMode);
 
   bool isOpaque() const override {
     return colorsAreOpaque;
@@ -54,6 +56,7 @@ class GradientShader : public Shader {
   std::vector<Color> originalColors = {};
   std::vector<float> originalPositions = {};
   const Matrix pointsToUnit;
+  const TileMode tileMode = TileMode::Clamp;
   bool colorsAreOpaque = false;
 
  protected:
@@ -71,7 +74,8 @@ class GradientShader : public Shader {
 class LinearGradientShader : public GradientShader {
  public:
   LinearGradientShader(const Point& startPoint, const Point& endPoint,
-                       const std::vector<Color>& colors, const std::vector<float>& positions);
+                       const std::vector<Color>& colors, const std::vector<float>& positions,
+                       TileMode tileMode);
 
   GradientType asGradient(GradientInfo*) const override;
 
@@ -83,7 +87,7 @@ class LinearGradientShader : public GradientShader {
 class RadialGradientShader : public GradientShader {
  public:
   RadialGradientShader(const Point& center, float radius, const std::vector<Color>& colors,
-                       const std::vector<float>& positions);
+                       const std::vector<float>& positions, TileMode tileMode);
 
   GradientType asGradient(GradientInfo*) const override;
 
@@ -92,10 +96,30 @@ class RadialGradientShader : public GradientShader {
                                                       const Matrix* uvMatrix) const override;
 };
 
+class TwoPointConicalGradientShader : public GradientShader {
+ public:
+  TwoPointConicalGradientShader(const Point& startCenter, float startRadius,
+                                const Point& endCenter, float endRadius,
+                                const std::vector<Color>& colors,
+                                const std::vector<float>& positions, TileMode tileMode);
+
+  GradientType asGradient(GradientInfo*) const override;
+
+ protected:
+  PlacementPtr<FragmentProcessor> asFragmentProcessor(const FPArgs& args,
+                                                      const Matrix* uvMatrix) const override;
+
+ private:
+  Point startCenter = {};
+  float startRadius = 0.f;
+  Point endCenter = {};
+  float endRadius = 0.f;
+};
+
 class ConicGradientShader : public GradientShader {
  public:
   ConicGradientShader(const Point& center, float t0, float t1, const std::vector<Color>& colors,
-                      const std::vector<float>& positions);
+                      const std::vector<float>& positions, TileMode tileMode);
 
   GradientType asGradient(GradientInfo*) const override;
 
@@ -111,7 +135,7 @@ class ConicGradientShader : public GradientShader {
 class DiamondGradientShader : public GradientShader {
  public:
   DiamondGradientShader(const Point& center, float halfDiagonal, const std::vector<Color>& colors,
-                        const std::vector<float>& positions);
+                        const std::vector<float>& positions, TileMode tileMode);
 
   GradientType asGradient(GradientInfo* info) const override;
 

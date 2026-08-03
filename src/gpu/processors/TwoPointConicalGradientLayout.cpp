@@ -2,7 +2,7 @@
 //
 //  Tencent is pleased to support the open source community by making tgfx available.
 //
-//  Copyright (C) 2023 Tencent. All rights reserved.
+//  Copyright (C) 2026 Tencent. All rights reserved.
 //
 //  Licensed under the BSD 3-Clause License (the "License"); you may not use this file except
 //  in compliance with the License. You may obtain a copy of the License at
@@ -16,23 +16,19 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-#pragma once
-
-#include <optional>
-#include "gpu/processors/ClampedGradientEffect.h"
-#include "tgfx/core/Color.h"
+#include "TwoPointConicalGradientLayout.h"
 
 namespace tgfx {
-class GLSLClampedGradientEffect : public ClampedGradientEffect {
- public:
-  GLSLClampedGradientEffect(PlacementPtr<FragmentProcessor> colorizer,
-                            PlacementPtr<FragmentProcessor> gradLayout, Color leftBorderColor,
-                            Color rightBorderColor);
+TwoPointConicalGradientLayout::TwoPointConicalGradientLayout(Matrix matrix, Point endCenterOffset,
+                                                             float startRadius, float endRadius)
+    : FragmentProcessor(ClassID()), coordTransform(matrix), endCenterOffset(endCenterOffset),
+      radii(Point::Make(startRadius, endRadius)) {
+  addCoordTransform(&coordTransform);
+}
 
-  void emitCode(EmitArgs& args) const override;
-
- private:
-  void onSetData(UniformBuffer* vertexUniformBuffer,
-                 UniformBuffer* fragmentUniformBuffer) const override;
-};
+void TwoPointConicalGradientLayout::onSetData(UniformBuffer* /*vertexUniformBuffer*/,
+                                              UniformBuffer* fragmentUniformBuffer) const {
+  fragmentUniformBuffer->setData("CenterOffset", endCenterOffset);
+  fragmentUniformBuffer->setData("Radii", radii);
+}
 }  // namespace tgfx

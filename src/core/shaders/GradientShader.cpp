@@ -21,14 +21,15 @@
 #include "core/utils/Types.h"
 #include "gpu/GlobalCache.h"
 #include "gpu/ShaderCaps.h"
-#include "gpu/processors/ClampedGradientEffect.h"
 #include "gpu/processors/ConicGradientLayout.h"
 #include "gpu/processors/DiamondGradientLayout.h"
 #include "gpu/processors/DualIntervalGradientColorizer.h"
+#include "gpu/processors/GradientEffect.h"
 #include "gpu/processors/LinearGradientLayout.h"
 #include "gpu/processors/RadialGradientLayout.h"
 #include "gpu/processors/SingleIntervalGradientColorizer.h"
 #include "gpu/processors/TextureGradientColorizer.h"
+#include "gpu/processors/TwoPointConicalGradientLayout.h"
 #include "gpu/processors/UnrolledBinaryGradientColorizer.h"
 
 namespace tgfx {
@@ -111,8 +112,9 @@ static PlacementPtr<FragmentProcessor> MakeColorizer(const Context* context, con
 }
 
 GradientShader::GradientShader(const std::vector<Color>& colors,
-                               const std::vector<float>& positions, const Matrix& pointsToUnit)
-    : pointsToUnit(pointsToUnit) {
+                               const std::vector<float>& positions, const Matrix& pointsToUnit,
+                               TileMode tileMode)
+    : pointsToUnit(pointsToUnit), tileMode(tileMode) {
   colorsAreOpaque = true;
   for (auto& color : colors) {
     if (!color.isOpaque()) {
@@ -175,9 +177,10 @@ static PlacementPtr<FragmentProcessor> MakeGradient(const Context* context,
   // The primary effect has to export premultiply colors, but under certain conditions it doesn't
   // need to do anything to achieve that: i.e., all the colors have a = 1, in which case
   // premultiply is a no op.
-  return ClampedGradientEffect::Make(context->drawingBuffer(), std::move(colorizer),
-                                     std::move(layout), shader.originalColors[0],
-                                     shader.originalColors[shader.originalColors.size() - 1]);
+  return GradientEffect::Make(context->drawingBuffer(), std::move(colorizer), std::move(layout),
+                              shader.originalColors[0],
+                              shader.originalColors[shader.originalColors.size() - 1],
+                              shader.tileMode);
 }
 
 static Matrix PointsToUnitMatrix(const Point& startPoint, const Point& endPoint) {
@@ -202,8 +205,8 @@ static std::array<Point, 2> UnitMatrixToPoints(const Matrix& matrix) {
 
 LinearGradientShader::LinearGradientShader(const Point& startPoint, const Point& endPoint,
                                            const std::vector<Color>& colors,
-                                           const std::vector<float>& positions)
-    : GradientShader(colors, positions, PointsToUnitMatrix(startPoint, endPoint)) {
+                                           const std::vector<float>& positions, TileMode tileMode)
+    : GradientShader(colors, positions, PointsToUnitMatrix(startPoint, endPoint), tileMode) {
 }
 
 PlacementPtr<FragmentProcessor> LinearGradientShader::asFragmentProcessor(
@@ -221,6 +224,7 @@ GradientType LinearGradientShader::asGradient(GradientInfo* info) const {
     info->colors = originalColors;
     info->positions = originalPositions;
     info->points = UnitMatrixToPoints(pointsToUnit);
+    info->tileMode = tileMode;
   }
   return GradientType::Linear;
 }
@@ -242,8 +246,8 @@ static std::tuple<Point, float> UnitMatrixToRadial(const Matrix& matrix) {
 
 RadialGradientShader::RadialGradientShader(const Point& center, float radius,
                                            const std::vector<Color>& colors,
-                                           const std::vector<float>& positions)
-    : GradientShader(colors, positions, RadialToUnitMatrix(center, radius)) {
+                                           const std::vector<float>& positions, TileMode tileMode)
+    : GradientShader(colors, positions, RadialToUnitMatrix(center, radius), tileMode) {
 }
 
 PlacementPtr<FragmentProcessor> RadialGradientShader::asFragmentProcessor(
@@ -261,14 +265,50 @@ GradientType RadialGradientShader::asGradient(GradientInfo* info) const {
     info->colors = originalColors;
     info->positions = originalPositions;
     std::tie(info->points[0], info->radiuses[0]) = UnitMatrixToRadial(pointsToUnit);
+    info->tileMode = tileMode;
   }
   return GradientType::Radial;
 }
 
+TwoPointConicalGradientShader::TwoPointConicalGradientShader(
+    const Point& startCenter, float startRadius, const Point& endCenter, float endRadius,
+    const std::vector<Color>& colors, const std::vector<float>& positions, TileMode tileMode)
+    : GradientShader(colors, positions, Matrix::MakeTrans(-startCenter.x, -startCenter.y),
+                     tileMode),
+      startCenter(startCenter), startRadius(startRadius), endCenter(endCenter),
+      endRadius(endRadius) {
+}
+
+PlacementPtr<FragmentProcessor> TwoPointConicalGradientShader::asFragmentProcessor(
+    const FPArgs& args, const Matrix* uvMatrix) const {
+  auto totalMatrix = pointsToUnit;
+  if (uvMatrix != nullptr) {
+    totalMatrix.preConcat(*uvMatrix);
+  }
+  return MakeGradient(args.context, *this,
+                      TwoPointConicalGradientLayout::Make(args.context->drawingBuffer(),
+                                                          totalMatrix, endCenter - startCenter,
+                                                          startRadius, endRadius));
+}
+
+GradientType TwoPointConicalGradientShader::asGradient(GradientInfo* info) const {
+  if (info) {
+    info->colors = originalColors;
+    info->positions = originalPositions;
+    info->points[0] = startCenter;
+    info->points[1] = endCenter;
+    info->radiuses[0] = startRadius;
+    info->radiuses[1] = endRadius;
+    info->tileMode = tileMode;
+  }
+  return GradientType::TwoPointConical;
+}
+
 ConicGradientShader::ConicGradientShader(const Point& center, float t0, float t1,
                                          const std::vector<Color>& colors,
-                                         const std::vector<float>& positions)
-    : GradientShader(colors, positions, Matrix::MakeTrans(-center.x, -center.y)), bias(-t0),
+                                         const std::vector<float>& positions, TileMode tileMode)
+    : GradientShader(colors, positions, Matrix::MakeTrans(-center.x, -center.y), tileMode),
+      bias(-t0),
       scale(1.f / (t1 - t0)) {
 }
 
@@ -292,6 +332,7 @@ GradientType ConicGradientShader::asGradient(GradientInfo* info) const {
     info->points[0] = center * -1.f;
     info->radiuses[0] = -bias * 360.f;
     info->radiuses[1] = (1.f / scale - bias) * 360.f;
+    info->tileMode = tileMode;
   }
   return GradientType::Conic;
 }
@@ -317,8 +358,9 @@ static std::tuple<Point, float> UnitMatrixToDiamondHalfDiagonal(const Matrix& ma
 
 DiamondGradientShader::DiamondGradientShader(const Point& center, float halfDiagonal,
                                              const std::vector<Color>& colors,
-                                             const std::vector<float>& positions)
-    : GradientShader(colors, positions, DiamondHalfDiagonalToUnitMatrix(center, halfDiagonal)) {
+                                             const std::vector<float>& positions, TileMode tileMode)
+    : GradientShader(colors, positions, DiamondHalfDiagonalToUnitMatrix(center, halfDiagonal),
+                     tileMode) {
 }
 
 PlacementPtr<FragmentProcessor> DiamondGradientShader::asFragmentProcessor(
@@ -336,13 +378,15 @@ GradientType DiamondGradientShader::asGradient(GradientInfo* info) const {
     info->colors = originalColors;
     info->positions = originalPositions;
     std::tie(info->points[0], info->radiuses[0]) = UnitMatrixToDiamondHalfDiagonal(pointsToUnit);
+    info->tileMode = tileMode;
   }
   return GradientType::Diamond;
 }
 
 std::shared_ptr<Shader> Shader::MakeLinearGradient(const Point& startPoint, const Point& endPoint,
                                                    const std::vector<Color>& colors,
-                                                   const std::vector<float>& positions) {
+                                                   const std::vector<float>& positions,
+                                                   TileMode tileMode) {
   if (!std::isfinite(Point::Distance(endPoint, startPoint)) || colors.empty()) {
     return nullptr;
   }
@@ -356,14 +400,16 @@ std::shared_ptr<Shader> Shader::MakeLinearGradient(const Point& startPoint, cons
     // once start and end are exactly the same, so just use the end color for a stable solution.
     return Shader::MakeColorShader(colors[0]);
   }
-  auto shader = std::make_shared<LinearGradientShader>(startPoint, endPoint, colors, positions);
+  auto shader =
+      std::make_shared<LinearGradientShader>(startPoint, endPoint, colors, positions, tileMode);
   shader->weakThis = shader;
   return shader;
 }
 
 std::shared_ptr<Shader> Shader::MakeRadialGradient(const Point& center, float radius,
                                                    const std::vector<Color>& colors,
-                                                   const std::vector<float>& positions) {
+                                                   const std::vector<float>& positions,
+                                                   TileMode tileMode) {
   if (radius < 0 || colors.empty()) {
     return nullptr;
   }
@@ -375,14 +421,36 @@ std::shared_ptr<Shader> Shader::MakeRadialGradient(const Point& center, float ra
     // Degenerate gradient optimization, and no special logic needed for clamped radial gradient
     return Shader::MakeColorShader(colors[colors.size() - 1]);
   }
-  auto shader = std::make_shared<RadialGradientShader>(center, radius, colors, positions);
+  auto shader = std::make_shared<RadialGradientShader>(center, radius, colors, positions, tileMode);
+  shader->weakThis = shader;
+  return shader;
+}
+
+std::shared_ptr<Shader> Shader::MakeTwoPointConicalGradient(
+    const Point& startCenter, float startRadius, const Point& endCenter, float endRadius,
+    const std::vector<Color>& colors, const std::vector<float>& positions, TileMode tileMode) {
+  if (!std::isfinite(Point::Distance(endCenter, startCenter)) || startRadius < 0 ||
+      endRadius < 0 || !std::isfinite(startRadius) || !std::isfinite(endRadius) ||
+      colors.empty()) {
+    return nullptr;
+  }
+  if (1 == colors.size()) {
+    return Shader::MakeColorShader(colors[0]);
+  }
+  if (FloatNearlyZero((endCenter - startCenter).length(), DegenerateThreshold) &&
+      FloatNearlyEqual(startRadius, endRadius, DegenerateThreshold)) {
+    return Shader::MakeColorShader(colors[0]);
+  }
+  auto shader = std::make_shared<TwoPointConicalGradientShader>(
+      startCenter, startRadius, endCenter, endRadius, colors, positions, tileMode);
   shader->weakThis = shader;
   return shader;
 }
 
 std::shared_ptr<Shader> Shader::MakeConicGradient(const Point& center, float startAngle,
                                                   float endAngle, const std::vector<Color>& colors,
-                                                  const std::vector<float>& positions) {
+                                                  const std::vector<float>& positions,
+                                                  TileMode tileMode) {
   if (colors.empty()) {
     return nullptr;
   }
@@ -390,14 +458,15 @@ std::shared_ptr<Shader> Shader::MakeConicGradient(const Point& center, float sta
     return Shader::MakeColorShader(colors[0]);
   }
   auto shader = std::make_shared<ConicGradientShader>(center, startAngle / 360.f, endAngle / 360.f,
-                                                      colors, positions);
+                                                      colors, positions, tileMode);
   shader->weakThis = shader;
   return shader;
 }
 
 std::shared_ptr<Shader> Shader::MakeDiamondGradient(const Point& center, float halfDiagonal,
                                                     const std::vector<Color>& colors,
-                                                    const std::vector<float>& positions) {
+                                                    const std::vector<float>& positions,
+                                                    TileMode tileMode) {
   if (halfDiagonal < 0 || colors.empty()) {
     return nullptr;
   }
@@ -409,7 +478,8 @@ std::shared_ptr<Shader> Shader::MakeDiamondGradient(const Point& center, float h
     // Degenerate gradient optimization, and no special logic needed for clamped diamond gradient
     return Shader::MakeColorShader(colors[colors.size() - 1]);
   }
-  auto shader = std::make_shared<DiamondGradientShader>(center, halfDiagonal, colors, positions);
+  auto shader =
+      std::make_shared<DiamondGradientShader>(center, halfDiagonal, colors, positions, tileMode);
   shader->weakThis = shader;
   return shader;
 }

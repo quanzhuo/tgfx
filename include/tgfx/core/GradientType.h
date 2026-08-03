@@ -38,6 +38,11 @@ enum class GradientType {
    */
   Radial,
   /**
+   * Two-point conical gradients are defined by two circles. The color gradient is drawn along
+   * expanding or shrinking circles between them.
+   */
+  TwoPointConical,
+  /**
    * Conic gradients are defined by a center point and an angular range. The color gradient is drawn
    * from the start angle to the end angle, wrapping around the center point.
    */

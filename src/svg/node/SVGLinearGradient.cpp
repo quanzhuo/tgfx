@@ -40,7 +40,7 @@ bool SVGLinearGradient::parseAndSetAttribute(const std::string& name, const std:
 std::shared_ptr<Shader> SVGLinearGradient::onMakeShader(const SVGRenderContext& context,
                                                         const std::vector<Color>& colors,
                                                         const std::vector<float>& positions,
-                                                        TileMode /*tileMode*/,
+                                                        TileMode tileMode,
                                                         const Matrix& /*localMatrix*/) const {
   SVGLengthContext lengthContext = context.lengthContext();
   lengthContext.setBoundingBoxUnits(getGradientUnits());
@@ -50,7 +50,7 @@ std::shared_ptr<Shader> SVGLinearGradient::onMakeShader(const SVGRenderContext& 
   auto endPoint = Point::Make(lengthContext.resolve(X2, SVGLengthContext::LengthType::Horizontal),
                               lengthContext.resolve(Y2, SVGLengthContext::LengthType::Vertical));
 
-  return Shader::MakeLinearGradient(startPoint, endPoint, colors, positions);
+  return Shader::MakeLinearGradient(startPoint, endPoint, colors, positions, tileMode);
 }
 
 }  // namespace tgfx

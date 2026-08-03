@@ -98,8 +98,10 @@ class ElementWriter {
   void addFillAndStroke(const Fill& fill, const Stroke* stroke, const Resources& resources);
 
   void addGradientColors(const GradientInfo& info);
+  void addGradientSpreadMethod(const GradientInfo& info);
   std::string addLinearGradientDef(const GradientInfo& info, const Matrix& matrix);
   std::string addRadialGradientDef(const GradientInfo& info, const Matrix& matrix);
+  std::string addTwoPointConicalGradientDef(const GradientInfo& info, const Matrix& matrix);
   std::string addUnsupportedGradientDef(const GradientInfo& info, const Matrix& matrix);
 
   std::string addImageFilter(const std::shared_ptr<ImageFilter>& imageFilter, Rect bound);

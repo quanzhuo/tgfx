@@ -2,7 +2,7 @@
 //
 //  Tencent is pleased to support the open source community by making tgfx available.
 //
-//  Copyright (C) 2023 Tencent. All rights reserved.
+//  Copyright (C) 2026 Tencent. All rights reserved.
 //
 //  Licensed under the BSD 3-Clause License (the "License"); you may not use this file except
 //  in compliance with the License. You may obtain a copy of the License at
@@ -18,32 +18,31 @@
 
 #pragma once
 
-#include <climits>
 #include "gpu/processors/FragmentProcessor.h"
-#include "tgfx/core/Color.h"
+#include "tgfx/core/Point.h"
 
 namespace tgfx {
-class ClampedGradientEffect : public FragmentProcessor {
+class TwoPointConicalGradientLayout : public FragmentProcessor {
  public:
-  static PlacementPtr<ClampedGradientEffect> Make(BlockBuffer* buffer,
-                                                  PlacementPtr<FragmentProcessor> colorizer,
-                                                  PlacementPtr<FragmentProcessor> gradLayout,
-                                                  Color leftBorderColor, Color rightBorderColor);
+  static PlacementPtr<TwoPointConicalGradientLayout> Make(BlockBuffer* buffer, Matrix matrix,
+                                                          Point endCenterOffset,
+                                                          float startRadius, float endRadius);
 
   std::string name() const override {
-    return "ClampedGradientEffect";
+    return "TwoPointConicalGradientLayout";
   }
 
  protected:
   DEFINE_PROCESSOR_CLASS_ID
 
-  ClampedGradientEffect(PlacementPtr<FragmentProcessor> colorizer,
-                        PlacementPtr<FragmentProcessor> gradLayout, Color leftBorderColor,
-                        Color rightBorderColor);
+  TwoPointConicalGradientLayout(Matrix matrix, Point endCenterOffset, float startRadius,
+                                float endRadius);
 
-  size_t colorizerIndex = ULONG_MAX;
-  size_t gradLayoutIndex = ULONG_MAX;
-  Color leftBorderColor;
-  Color rightBorderColor;
+  void onSetData(UniformBuffer* vertexUniformBuffer,
+                 UniformBuffer* fragmentUniformBuffer) const override;
+
+  CoordTransform coordTransform;
+  Point endCenterOffset = {};
+  Point radii = {};
 };
 }  // namespace tgfx

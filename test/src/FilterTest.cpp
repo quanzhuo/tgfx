@@ -531,7 +531,7 @@ TGFX_TEST(FilterTest, GetShaderProperties) {
     ASSERT_TRUE(shader != nullptr);
     EXPECT_EQ(shader->type(), Shader::Type::Gradient);
 
-    auto gradientShader = std::static_pointer_cast<LinearGradientShader>(shader);
+    auto gradientShader = std::static_pointer_cast<GradientShader>(shader);
 
     GradientInfo info;
     auto gradientType = gradientShader->asGradient(&info);
@@ -540,6 +540,20 @@ TGFX_TEST(FilterTest, GetShaderProperties) {
     EXPECT_EQ(info.positions, positions);
     EXPECT_EQ(info.points[0], startPoint);
     EXPECT_EQ(info.points[1], endPoint);
+    EXPECT_EQ(info.tileMode, TileMode::Clamp);
+  }
+
+  {
+    auto shader =
+        Shader::MakeLinearGradient(startPoint, endPoint, colors, positions, TileMode::Repeat);
+    ASSERT_TRUE(shader != nullptr);
+
+    auto gradientShader = std::static_pointer_cast<GradientShader>(shader);
+
+    GradientInfo info;
+    auto gradientType = gradientShader->asGradient(&info);
+    EXPECT_EQ(gradientType, GradientType::Linear);
+    EXPECT_EQ(info.tileMode, TileMode::Repeat);
   }
 
   auto center = Point::Make(50, 50);
@@ -549,7 +563,7 @@ TGFX_TEST(FilterTest, GetShaderProperties) {
     ASSERT_TRUE(shader != nullptr);
     EXPECT_EQ(shader->type(), Shader::Type::Gradient);
 
-    auto gradientShader = std::static_pointer_cast<LinearGradientShader>(shader);
+    auto gradientShader = std::static_pointer_cast<GradientShader>(shader);
 
     GradientInfo info;
     auto gradientType = gradientShader->asGradient(&info);
@@ -558,6 +572,31 @@ TGFX_TEST(FilterTest, GetShaderProperties) {
     EXPECT_EQ(info.positions, positions);
     EXPECT_EQ(info.points[0], center);
     EXPECT_EQ(info.radiuses[0], radius);
+    EXPECT_EQ(info.tileMode, TileMode::Clamp);
+  }
+
+  {
+    auto startCenter = Point::Make(25, 25);
+    float startRadius = 0;
+    auto endCenter = Point::Make(75, 50);
+    float endRadius = 50;
+    auto shader = Shader::MakeTwoPointConicalGradient(
+        startCenter, startRadius, endCenter, endRadius, colors, positions, TileMode::Mirror);
+    ASSERT_TRUE(shader != nullptr);
+    EXPECT_EQ(shader->type(), Shader::Type::Gradient);
+
+    auto gradientShader = std::static_pointer_cast<GradientShader>(shader);
+
+    GradientInfo info;
+    auto gradientType = gradientShader->asGradient(&info);
+    EXPECT_EQ(gradientType, GradientType::TwoPointConical);
+    EXPECT_EQ(info.colors, colors);
+    EXPECT_EQ(info.positions, positions);
+    EXPECT_EQ(info.points[0], startCenter);
+    EXPECT_EQ(info.points[1], endCenter);
+    EXPECT_EQ(info.radiuses[0], startRadius);
+    EXPECT_EQ(info.radiuses[1], endRadius);
+    EXPECT_EQ(info.tileMode, TileMode::Mirror);
   }
 
   {
@@ -567,7 +606,7 @@ TGFX_TEST(FilterTest, GetShaderProperties) {
     ASSERT_TRUE(shader != nullptr);
     EXPECT_EQ(shader->type(), Shader::Type::Gradient);
 
-    auto gradientShader = std::static_pointer_cast<LinearGradientShader>(shader);
+    auto gradientShader = std::static_pointer_cast<GradientShader>(shader);
 
     GradientInfo info;
     auto gradientType = gradientShader->asGradient(&info);
@@ -577,6 +616,7 @@ TGFX_TEST(FilterTest, GetShaderProperties) {
     EXPECT_EQ(info.points[0], center);
     EXPECT_EQ(info.radiuses[0], startAngle);
     EXPECT_EQ(info.radiuses[1], endAngle);
+    EXPECT_EQ(info.tileMode, TileMode::Clamp);
   }
 
   center = Point::Make(50, 50);
@@ -586,7 +626,7 @@ TGFX_TEST(FilterTest, GetShaderProperties) {
     ASSERT_TRUE(shader != nullptr);
     EXPECT_EQ(shader->type(), Shader::Type::Gradient);
 
-    auto gradientShader = std::static_pointer_cast<DiamondGradientShader>(shader);
+    auto gradientShader = std::static_pointer_cast<GradientShader>(shader);
 
     GradientInfo info;
     auto gradientType = gradientShader->asGradient(&info);
@@ -596,6 +636,7 @@ TGFX_TEST(FilterTest, GetShaderProperties) {
     EXPECT_FLOAT_EQ(info.points[0].x, center.x);
     EXPECT_FLOAT_EQ(info.points[0].y, center.y);
     EXPECT_FLOAT_EQ(info.radiuses[0], halfDiagonal);
+    EXPECT_EQ(info.tileMode, TileMode::Clamp);
   }
 }
 

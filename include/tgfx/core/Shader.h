@@ -67,10 +67,12 @@ class Shader {
    * array. If this is empty, the colors are distributed evenly between the start and end point.
    * If this is not empty, the values must begin with 0, end with 1.0, and intermediate values must
    * be strictly increasing.
+   * @param tileMode Determines how the gradient draws outside its original 0..1 range.
    */
   static std::shared_ptr<Shader> MakeLinearGradient(const Point& startPoint, const Point& endPoint,
                                                     const std::vector<Color>& colors,
-                                                    const std::vector<float>& positions = {});
+                                                    const std::vector<float>& positions = {},
+                                                    TileMode tileMode = TileMode::Clamp);
 
   /**
    * Returns a shader that generates a radial gradient given the center and radius. The color
@@ -82,10 +84,31 @@ class Shader {
    * array. If this is empty, the colors are distributed evenly between the start and end point.
    * If this is not empty, the values must begin with 0, end with 1.0, and intermediate values must
    * be strictly increasing.
+   * @param tileMode Determines how the gradient draws outside its original 0..1 range.
    */
   static std::shared_ptr<Shader> MakeRadialGradient(const Point& center, float radius,
                                                     const std::vector<Color>& colors,
-                                                    const std::vector<float>& positions = {});
+                                                    const std::vector<float>& positions = {},
+                                                    TileMode tileMode = TileMode::Clamp);
+
+  /**
+   * Returns a shader that generates a radial gradient between two circles. The color gradient is
+   * drawn along expanding or shrinking circles from the start circle to the end circle.
+   * @param startCenter The center of the circle corresponding to pos == 0.
+   * @param startRadius Must be non-negative. The radius corresponding to pos == 0.
+   * @param endCenter The center of the circle corresponding to pos == 1.
+   * @param endRadius Must be non-negative. The radius corresponding to pos == 1.
+   * @param colors The array of colors, to be distributed between the two circles.
+   * @param positions Maybe empty. The relative position of each corresponding color in the color
+   * array. If this is empty, the colors are distributed evenly between the two circles.
+   * If this is not empty, the values must begin with 0, end with 1.0, and intermediate values must
+   * be strictly increasing.
+   * @param tileMode Determines how the gradient draws outside its original 0..1 range.
+   */
+  static std::shared_ptr<Shader> MakeTwoPointConicalGradient(
+      const Point& startCenter, float startRadius, const Point& endCenter, float endRadius,
+      const std::vector<Color>& colors, const std::vector<float>& positions = {},
+      TileMode tileMode = TileMode::Clamp);
 
   /**
    * Returns a shader that generates a conic gradient given a center point and an angular range.
@@ -100,10 +123,12 @@ class Shader {
    * array. If this is empty, the colors are distributed evenly between the start and end point.
    * If this is not empty, the values must begin with 0, end with 1.0, and intermediate values must
    * be strictly increasing.
+   * @param tileMode Determines how the gradient draws outside its original 0..1 range.
    */
   static std::shared_ptr<Shader> MakeConicGradient(const Point& center, float startAngle,
                                                    float endAngle, const std::vector<Color>& colors,
-                                                   const std::vector<float>& positions = {});
+                                                   const std::vector<float>& positions = {},
+                                                   TileMode tileMode = TileMode::Clamp);
 
   /**
    * Returns a shader that generates a diamond gradient given the center and half-diagonal. The
@@ -115,10 +140,12 @@ class Shader {
    * array. If this is empty, the colors are distributed evenly between the start and end point.
    * If this is not empty, the values must begin with 0, end with 1.0, and intermediate values must
    * be strictly increasing.
+   * @param tileMode Determines how the gradient draws outside its original 0..1 range.
    */
   static std::shared_ptr<Shader> MakeDiamondGradient(const Point& center, float halfDiagonal,
                                                      const std::vector<Color>& colors,
-                                                     const std::vector<float>& positions = {});
+                                                     const std::vector<float>& positions = {},
+                                                     TileMode tileMode = TileMode::Clamp);
   virtual ~Shader() = default;
 
   /**

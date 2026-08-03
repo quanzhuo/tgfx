@@ -480,6 +480,9 @@ void ElementWriter::addGradientShaderResources(const GradientShader* shader, con
     resources->paintColor = "url(#" + addLinearGradientDef(info, matrix) + ")";
   } else if (type == GradientType::Radial) {
     resources->paintColor = "url(#" + addRadialGradientDef(info, matrix) + ")";
+  } else if (type == GradientType::TwoPointConical &&
+             FloatNearlyZero(info.radiuses[0])) {
+    resources->paintColor = "url(#" + addTwoPointConicalGradientDef(info, matrix) + ")";
   } else {
     resources->paintColor = "url(#" + addUnsupportedGradientDef(info, matrix) + ")";
     reportUnsupportedElement("Unsupported gradient type");
@@ -502,6 +505,20 @@ void ElementWriter::addGradientColors(const GradientInfo& info) {
   }
 }
 
+void ElementWriter::addGradientSpreadMethod(const GradientInfo& info) {
+  switch (info.tileMode) {
+    case TileMode::Repeat:
+      addAttribute("spreadMethod", "repeat");
+      break;
+    case TileMode::Mirror:
+      addAttribute("spreadMethod", "reflect");
+      break;
+    case TileMode::Clamp:
+    case TileMode::Decal:
+      break;
+  }
+}
+
 std::string ElementWriter::addLinearGradientDef(const GradientInfo& info, const Matrix& matrix) {
   DEBUG_ASSERT(resourceStore);
   auto id = resourceStore->addGradient();
@@ -518,6 +535,7 @@ std::string ElementWriter::addLinearGradientDef(const GradientInfo& info, const 
     gradient.addAttribute("y1", info.points[0].y);
     gradient.addAttribute("x2", info.points[1].x);
     gradient.addAttribute("y2", info.points[1].y);
+    gradient.addGradientSpreadMethod(info);
     addGradientColors(info);
   }
   return id;
@@ -538,6 +556,7 @@ std::string ElementWriter::addRadialGradientDef(const GradientInfo& info, const 
     gradient.addAttribute("r", info.radiuses[0]);
     gradient.addAttribute("cx", info.points[0].x);
     gradient.addAttribute("cy", info.points[0].y);
+    gradient.addGradientSpreadMethod(info);
     addGradientColors(info);
   }
   return id;
@@ -559,6 +578,30 @@ std::string ElementWriter::addUnsupportedGradientDef(const GradientInfo& info,
     gradient.addAttribute("r", info.radiuses[0]);
     gradient.addAttribute("cx", info.points[0].x);
     gradient.addAttribute("cy", info.points[0].y);
+    addGradientColors(info);
+  }
+  return id;
+}
+
+std::string ElementWriter::addTwoPointConicalGradientDef(const GradientInfo& info,
+                                                         const Matrix& matrix) {
+  DEBUG_ASSERT(resourceStore);
+  auto id = resourceStore->addGradient();
+
+  {
+    ElementWriter gradient("radialGradient", writer);
+
+    gradient.addAttribute("id", id);
+    if (!matrix.isIdentity()) {
+      gradient.addAttribute("gradientTransform", ToSVGTransform(matrix));
+    }
+    gradient.addAttribute("gradientUnits", "userSpaceOnUse");
+    gradient.addAttribute("r", info.radiuses[1]);
+    gradient.addAttribute("cx", info.points[1].x);
+    gradient.addAttribute("cy", info.points[1].y);
+    gradient.addAttribute("fx", info.points[0].x);
+    gradient.addAttribute("fy", info.points[0].y);
+    gradient.addGradientSpreadMethod(info);
     addGradientColors(info);
   }
   return id;

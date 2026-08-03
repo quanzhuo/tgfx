@@ -16,15 +16,22 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "ClampedGradientEffect.h"
+#pragma once
+
+#include "gpu/processors/GradientEffect.h"
+#include "tgfx/core/Color.h"
 
 namespace tgfx {
-ClampedGradientEffect::ClampedGradientEffect(PlacementPtr<FragmentProcessor> colorizer,
-                                             PlacementPtr<FragmentProcessor> gradLayout,
-                                             Color leftBorderColor, Color rightBorderColor)
-    : FragmentProcessor(ClassID()), leftBorderColor(leftBorderColor),
-      rightBorderColor(rightBorderColor) {
-  colorizerIndex = registerChildProcessor(std::move(colorizer));
-  gradLayoutIndex = registerChildProcessor(std::move(gradLayout));
-}
+class GLSLGradientEffect : public GradientEffect {
+ public:
+  GLSLGradientEffect(PlacementPtr<FragmentProcessor> colorizer,
+                     PlacementPtr<FragmentProcessor> gradLayout, Color leftBorderColor,
+                     Color rightBorderColor, TileMode tileMode);
+
+  void emitCode(EmitArgs& args) const override;
+
+ private:
+  void onSetData(UniformBuffer* vertexUniformBuffer,
+                 UniformBuffer* fragmentUniformBuffer) const override;
+};
 }  // namespace tgfx
